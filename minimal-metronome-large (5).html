@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Metronome</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Handjet:wght@100..900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0C0C0E;
+    --fg: #B8923A;
+    --dim: rgba(184,146,58,0.45);
+    --faint: rgba(184,146,58,0.15);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%; width: 100%;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: 'Handjet', Helvetica, Arial, sans-serif;
+    font-weight: 700;
+    overflow: hidden;
+  }
+  body {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 40px 20px;
+  }
+
+  /* VOL */
+  .volume-control {
+    position: fixed;
+    top: 20px; left: 20px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .volume-control input[type="range"] {
+    width: 80px; height: 3px;
+    -webkit-appearance: none; appearance: none;
+    background: var(--faint); border-radius: 2px;
+    outline: none; cursor: pointer;
+  }
+  .volume-control input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--fg); cursor: grab;
+  }
+  .volume-control input[type="range"]::-moz-range-thumb {
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--fg); border: none; cursor: grab;
+  }
+  .volume-label {
+    font-size: 15px;
+    color: var(--dim);
+    letter-spacing: 1px;
+  }
+
+  /* Fullscreen */
+  .fullscreen-btn {
+    position: fixed;
+    top: 20px; right: 20px;
+    background: none; border: none;
+    color: var(--dim); cursor: pointer;
+    padding: 8px;
+    transition: color 0.15s;
+  }
+  .fullscreen-btn:hover { color: var(--fg); }
+
+  /* Main circle */
+  .main-circle {
+    position: relative;
+    width: 780px; height: 780px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 30px;
+  }
+
+  /* Progress ring — stroke doubled to 8 */
+  .progress-ring {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    transform: rotate(-90deg);
+    pointer-events: none;
+    overflow: visible;
+  }
+  .progress-ring .bar {
+    fill: none;
+    stroke: var(--ring-color, hsl(215,72%,42%));
+    stroke-width: 8;
+    stroke-linecap: butt;
+    filter: drop-shadow(0 0 10px var(--ring-color, hsl(215,72%,42%)));
+    transition: stroke 0.6s, filter 0.6s;
+    animation: ringPulse 2s ease-in-out infinite;
+  }
+  @keyframes ringPulse {
+    0%, 100% {
+      filter: drop-shadow(0 0 8px var(--ring-color))
+              drop-shadow(0 0 3px var(--ring-color));
+      opacity: 0.85;
+    }
+    50% {
+      filter: drop-shadow(0 0 22px var(--ring-color))
+              drop-shadow(0 0 8px var(--ring-color));
+      opacity: 1;
+    }
+  }
+
+  /* BPM number */
+  .bpm-number {
+    font-size: 220px;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+    z-index: 10;
+    line-height: 1;
+    letter-spacing: -2px;
+  }
+
+  /* Beat dots — horizontal row under BPM number */
+  .beat-row {
+    display: flex;
+    flex-direction: row;
+    gap: 26px;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+  }
+  .beat-row .dot {
+    width: 20px; height: 20px; border-radius: 50%;
+    background: var(--faint);
+    transition: all 0.1s;
+    flex-shrink: 0;
+  }
+  .beat-row .dot.accent { background: rgba(184,146,58,0.4); }
+  .beat-row .dot.active {
+    background: var(--fg);
+    box-shadow: 0 0 18px var(--fg);
+    transform: scale(1.8);
+  }
+
+  /* +/− buttons — same gold as numbers, larger, pushed further out */
+  .plus-btn, .minus-btn {
+    position: absolute;
+    width: 185px; height: 185px;
+    background: none; border: none;
+    color: var(--fg); cursor: pointer;
+    font-size: 300px; font-weight: 700;
+    font-family: 'Handjet', Helvetica, Arial, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    transition: color 0.15s, text-shadow 0.15s;
+    user-select: none;
+    line-height: 0.65;
+  }
+  .plus-btn:hover, .minus-btn:hover {
+    text-shadow: 0 0 24px var(--fg);
+  }
+  .plus-btn  { right: -300px; top: 50%; transform: translateY(-50%); }
+  .minus-btn { left:  -300px; top: 50%; transform: translateY(-50%); }
+
+  /* Subdivision buttons */
+  .sub-btn {
+    position: absolute;
+    background: none; border: none;
+    color: var(--dim); cursor: pointer;
+    font-size: 34px; font-weight: 700;
+    font-family: 'Handjet', Helvetica, Arial, sans-serif;
+    padding: 6px 12px; border-radius: 4px;
+    transition: all 0.15s;
+    user-select: none;
+    border: 1px solid transparent;
+  }
+  .sub-btn:hover { color: var(--fg); }
+  .sub-btn.active { color: var(--fg); border-color: var(--dim); }
+  .sub-btn.quarter   { left:  -300px; width: 185px; text-align: center; top: calc(50% + 115px); transform: none; }
+  .sub-btn.sixteenth { right: -300px; width: 185px; text-align: center; top: calc(50% + 115px); transform: none; }
+
+  /* Timer — larger */
+  .timer-time {
+    font-size: 170px;
+    font-weight: 700;
+    cursor: pointer;
+    user-select: none;
+    margin-top: 50px;
+    letter-spacing: 28px;
+    transform: scaleX(1.22);
+    display: inline-block;
+  }
+
+  /* BPM pulse on each beat */
+  @keyframes bpmBeat {
+    0%   { color: var(--fg);    text-shadow: none; }
+    18%  { color: #FFD060;      text-shadow: 0 0 30px #FFD060, 0 0 60px rgba(255,208,80,0.35); }
+    100% { color: var(--fg);    text-shadow: none; }
+  }
+  .bpm-number.beating {
+    animation: bpmBeat 0.32s ease-out forwards;
+  }
+
+  @keyframes alarmBlink {
+    0%, 49% { opacity: 1; }
+    50%, 100% { opacity: 0; }
+  }
+  .blinking {
+    animation: alarmBlink 0.22s steps(1) infinite;
+  }
+
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  body > * { animation: fadeIn 0.5s ease-out; }
+</style>
+</head>
+<body>
+
+  <div class="volume-control">
+    <span class="volume-label">VOL</span>
+    <input type="range" id="volumeSlider" min="0" max="1" step="0.1" value="0.5" />
+  </div>
+
+  <button class="fullscreen-btn" id="fullscreenBtn">
+    <svg width="30" height="30" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M3 7V3h4M17 7V3h-4M3 13v4h4M17 13v4h-4"/>
+    </svg>
+  </button>
+
+  <div class="main-circle">
+    <svg class="progress-ring" viewBox="0 0 100 100">
+      <circle id="ringBar" class="bar" cx="50" cy="50" r="46"
+        stroke-dasharray="289" stroke-dashoffset="0" />
+    </svg>
+
+    <div class="bpm-number" id="bpmNumber">120</div>
+
+    <div class="beat-row">
+      <div class="dot accent"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+      <div class="dot"></div>
+    </div>
+
+    <button class="minus-btn" id="minusBtn">−</button>
+    <button class="plus-btn"  id="plusBtn">+</button>
+    <button class="sub-btn quarter active" id="quarterBtn">1/4</button>
+    <button class="sub-btn sixteenth"      id="sixteenthBtn">1/16</button>
+  </div>
+
+  <div class="timer-time" id="timerTime">03:00</div>
+
+<script>
+const TIMER_DURATION = 180;
+const BEATS = 4;
+let bpm = 120, isPlaying = false;
+let beatCounter = 0, schedulerId = null, nextNoteTime = 0;
+let timerRunning = false, remaining = TIMER_DURATION, timerInterval = null;
+let volume = 0.5;
+let subdivision = 1;
+
+let audioCtx = null, compressor = null;
+function initAudio() {
+  if (!audioCtx) {
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Master compressor so loud hits don't clip
+    compressor = audioCtx.createDynamicsCompressor();
+    compressor.threshold.value = -6;
+    compressor.knee.value      = 3;
+    compressor.ratio.value     = 4;
+    compressor.attack.value    = 0.001;
+    compressor.release.value   = 0.1;
+    compressor.connect(audioCtx.destination);
+  }
+  if (audioCtx.state === "suspended") audioCtx.resume();
+}
+function playAlarm() {
+  initAudio();
+  stopMetronome();
+  const ALARM_DURATION = 2.0;
+  const BEEPS = 8;
+  const interval = ALARM_DURATION / BEEPS;
+  for (let i = 0; i < BEEPS; i++) {
+    const t = audioCtx.currentTime + i * interval;
+    const osc  = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(1600, t);
+    osc.frequency.linearRampToValueAtTime(1900, t + interval * 0.4);
+    const vol = volume * 3.0;
+    gain.gain.setValueAtTime(vol, t);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + interval * 0.75);
+    osc.connect(gain);
+    gain.connect(compressor);
+    osc.start(t);
+    osc.stop(t + interval * 0.75);
+  }
+  document.getElementById("bpmNumber").classList.add("blinking");
+  document.getElementById("timerTime").classList.add("blinking");
+  setTimeout(() => {
+    document.getElementById("bpmNumber").classList.remove("blinking");
+    document.getElementById("timerTime").classList.remove("blinking");
+    stopMetronome();
+    stopTimer();
+    remaining = TIMER_DURATION;
+    beatCounter = 0;
+    setActiveBeat(-1);
+    updateTimer();
+  }, (ALARM_DURATION + 0.1) * 1000);
+}
+
+function playClick(type, time) {
+  const osc  = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = type === 'sub' ? "triangle" : "sine";
+  osc.frequency.value = type === 'accent' ? 1800 : type === 'beat' ? 1100 : 750;
+  const vol = (type === 'accent' ? 2.8 : type === 'beat' ? 2.2 : 1.5) * volume;
+  gain.gain.setValueAtTime(vol, time);
+  gain.gain.exponentialRampToValueAtTime(0.001, time + 0.09);
+  osc.connect(gain);
+  gain.connect(compressor);
+  osc.start(time);
+  osc.stop(time + 0.11);
+}
+
+const LOOK_AHEAD = 25, SCHEDULE_AHEAD = 0.1;
+function scheduler() {
+  const subInterval = 60 / bpm / subdivision;
+  while (nextNoteTime < audioCtx.currentTime + SCHEDULE_AHEAD) {
+    const subStep = beatCounter % subdivision;
+    const beatPos = Math.floor(beatCounter / subdivision) % BEATS;
+    let type;
+    if (subStep === 0) type = beatPos === 0 ? 'accent' : 'beat';
+    else               type = 'sub';
+    playClick(type, nextNoteTime);
+    if (subStep === 0) {
+      const bp    = beatPos;
+      const delay = (nextNoteTime - audioCtx.currentTime) * 1000;
+      setTimeout(() => {
+        setActiveBeat(bp);
+        // pulse the BPM number
+        const el = document.getElementById("bpmNumber");
+        el.classList.remove("beating");
+        void el.offsetWidth; // force reflow to restart animation
+        el.classList.add("beating");
+      }, Math.max(0, delay));
+    }
+    nextNoteTime += subInterval;
+    beatCounter++;
+  }
+}
+
+function startMetronome() {
+  initAudio();
+  beatCounter  = 0;
+  nextNoteTime = audioCtx.currentTime + 0.05;
+  schedulerId  = setInterval(scheduler, LOOK_AHEAD);
+  isPlaying    = true;
+}
+function stopMetronome() {
+  clearInterval(schedulerId);
+  schedulerId = null;
+  isPlaying   = false;
+  setActiveBeat(-1);
+}
+
+function setActiveBeat(i) {
+  document.querySelectorAll(".beat-row .dot").forEach((el, idx) => {
+    el.classList.toggle("active", idx === i);
+  });
+}
+
+function setBpm(v) {
+  bpm = Math.max(20, Math.min(300, Math.round(v)));
+  document.getElementById("bpmNumber").textContent = bpm;
+}
+
+function formatTime(s) {
+  const m   = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+}
+
+function updateTimer() {
+  document.getElementById("timerTime").textContent = formatTime(remaining);
+  const ring     = document.getElementById("ringBar");
+  const CIRC     = 289;
+  const progress = remaining / TIMER_DURATION;
+
+  ring.setAttribute("stroke-dashoffset", String(CIRC * (1 - progress)));
+
+  // Deep blue (hue 215) → dark red (hue 0) as time drains
+  const hue   = Math.round(215 * progress);
+  const color = `hsl(${hue}, 72%, 42%)`;
+  ring.style.setProperty("--ring-color", color);
+  ring.style.stroke = color;
+}
+
+function startTimer() {
+  if (remaining === 0) remaining = TIMER_DURATION;
+  timerRunning  = true;
+  timerInterval = setInterval(() => {
+    remaining--;
+    updateTimer();
+    if (remaining <= 0) {
+      timerRunning = false;
+      clearInterval(timerInterval);
+      playAlarm();
+    }
+  }, 1000);
+}
+function stopTimer()  { timerRunning = false; clearInterval(timerInterval); }
+function resetTimer() { stopTimer(); remaining = TIMER_DURATION; updateTimer(); }
+
+let bpmClickTimeout, timerClickTimeout;
+
+document.getElementById("bpmNumber").addEventListener("click", () => {
+  if (bpmClickTimeout) { clearTimeout(bpmClickTimeout); bpmClickTimeout = null; return; }
+  bpmClickTimeout = setTimeout(() => {
+    if (isPlaying) { stopMetronome(); stopTimer(); }
+    else           { startMetronome(); startTimer(); }
+    bpmClickTimeout = null;
+  }, 250);
+});
+
+document.getElementById("timerTime").addEventListener("click", () => {
+  if (timerClickTimeout) {
+    clearTimeout(timerClickTimeout); timerClickTimeout = null;
+    stopMetronome(); stopTimer(); resetTimer(); beatCounter = 0; setActiveBeat(-1);
+    return;
+  }
+  timerClickTimeout = setTimeout(() => {
+    if (timerRunning) { stopTimer(); stopMetronome(); }
+    else              { startTimer(); startMetronome(); }
+    timerClickTimeout = null;
+  }, 250);
+});
+
+document.getElementById("volumeSlider").addEventListener("input", (e) => { volume = parseFloat(e.target.value); });
+
+document.getElementById("fullscreenBtn").addEventListener("click", () => {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+  else document.exitFullscreen();
+});
+
+document.getElementById("plusBtn").onclick  = () => setBpm(bpm + 5);
+document.getElementById("minusBtn").onclick = () => setBpm(bpm - 5);
+
+document.getElementById("quarterBtn").onclick = () => {
+  subdivision = 1; beatCounter = 0;
+  document.getElementById("quarterBtn").classList.add("active");
+  document.getElementById("sixteenthBtn").classList.remove("active");
+};
+document.getElementById("sixteenthBtn").onclick = () => {
+  subdivision = 4; beatCounter = 0;
+  document.getElementById("quarterBtn").classList.remove("active");
+  document.getElementById("sixteenthBtn").classList.add("active");
+};
+
+document.addEventListener("keydown", (e) => {
+  if (e.code === "Space") {
+    e.preventDefault();
+    if (isPlaying) { stopMetronome(); stopTimer(); }
+    else           { startMetronome(); startTimer(); }
+  }
+  if (e.code === "Enter" || e.code === "KeyR") {
+    e.preventDefault();
+    stopMetronome(); stopTimer(); resetTimer(); beatCounter = 0; setActiveBeat(-1);
+  }
+  if (e.code === "ArrowRight") {
+    e.preventDefault();
+    setBpm(bpm + 5);
+  }
+  if (e.code === "ArrowLeft") {
+    e.preventDefault();
+    setBpm(bpm - 5);
+  }
+  if (e.code === "ArrowUp") {
+    e.preventDefault();
+    volume = Math.min(1, Math.round((volume + 0.1) * 10) / 10);
+    document.getElementById("volumeSlider").value = volume;
+  }
+  if (e.code === "ArrowDown") {
+    e.preventDefault();
+    volume = Math.max(0, Math.round((volume - 0.1) * 10) / 10);
+    document.getElementById("volumeSlider").value = volume;
+  }
+});
+
+updateTimer();
+</script>
+</body>
+</html>
